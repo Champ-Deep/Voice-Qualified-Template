@@ -18,51 +18,28 @@ services:
     networks:
       - champqualifier-network
 
-  # Backend service
-  backend:
+  # Combined app service (backend serves frontend)
+  app:
     build:
       context: .
-      dockerfile: Dockerfile.backend
-    container_name: champqualifier-backend
+      dockerfile: Dockerfile
+      args:
+        VITE_VOICE_API_URL: ${VITE_VOICE_API_URL:-https://api.elevenlabs.io/v1}
+        VITE_VOICE_API_KEY: ${VITE_VOICE_API_KEY}
+        VITE_AGENT_ID: ${VITE_AGENT_ID}
+        VITE_PHONE_NUMBER_ID: ${VITE_PHONE_NUMBER_ID}
+    container_name: champqualifier-app
     ports:
-      - "3001:3001"
+      - "${PORT:-3001}:${PORT:-3001}"
     environment:
-      - PORT=3001
+      - PORT=${PORT:-3001}
       - REDIS_URL=redis://redis:6379
-      - FRONTEND_URL=http://localhost:3000
+      - WEBHOOK_SECRET=${WEBHOOK_SECRET:-}
+      - FRONTEND_URL=${FRONTEND_URL:-}
       - NODE_ENV=production
     depends_on:
       redis:
         condition: service_healthy
-    networks:
-      - champqualifier-network
-    restart: unless-stopped
-
-  # Frontend service
-  frontend:
-    build:
-      context: .
-      dockerfile: Dockerfile.frontend
-      args:
-        VITE_VOICE_API_URL: ${VITE_VOICE_API_URL:-https://api.elevenlabs.io/v1}
-        VITE_VOICE_API_KEY: ${VITE_VOICE_API_KEY}
-        VITE_AGENT_ID: ${VITE_AGENT_ID:-agent_3501kf4e3ak0eqkrxg1rttttk881}
-        VITE_PHONE_NUMBER_ID: ${VITE_PHONE_NUMBER_ID:-phnum_4901kg4yjvgpetqbeknvhgm1stk4}
-        VITE_REDIS_URL: ${VITE_REDIS_URL:-redis://redis:6379}
-        VITE_WEBHOOK_URL: ${VITE_WEBHOOK_URL:-http://backend:3001/api/webhook}
-        VITE_BACKEND_URL: ${VITE_BACKEND_URL:-http://localhost:3001}
-    container_name: champqualifier-frontend
-    ports:
-      - "3000:80"
-    environment:
-      - VITE_VOICE_API_URL=https://api.elevenlabs.io/v1
-      - VITE_VOICE_API_KEY=${VITE_VOICE_API_KEY}
-      - VITE_AGENT_ID=agent_3501kf4e3ak0eqkrxg1rttttk881
-      - VITE_PHONE_NUMBER_ID=phnum_4901kg4yjvgpetqbeknvhgm1stk4
-      - VITE_REDIS_URL=redis://redis:6379
-      - VITE_WEBHOOK_URL=http://backend:3001/api/webhook
-    depends_on:
-      - backend
     networks:
       - champqualifier-network
     restart: unless-stopped

@@ -4,16 +4,25 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
 import Redis from 'ioredis';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
 dotenv.config();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// Redis connection
-const redis = new Redis(process.env.REDIS_URL || 'redis://redis:6379', {
+// Redis connection - uses REDIS_URL env var (Railway provides this when you add a Redis plugin)
+const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379', {
   maxRetriesPerRequest: 3,
   enableReadyCheck: true,
+  retryStrategy(times) {
+    const delay = Math.min(times * 200, 5000);
+    return delay;
+  },
 });
 
 redis.on('error', (err) => {
@@ -25,9 +34,25 @@ redis.on('connect', () => {
 });
 
 // Middleware
-app.use(helmet());
+app.use(helmet({
+  contentSecurityPolicy: false,
+}));
+
+// CORS: allow configured frontend URL, or same-origin if not set
+const allowedOrigins = process.env.FRONTEND_URL
+  ? process.env.FRONTEND_URL.split(',').map(s => s.trim())
+  : [];
+
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+  origin: (origin, callback) => {
+    // Allow requests with no origin (same-origin, server-to-server, curl)
+    if (!origin) return callback(null, true);
+    // Allow if in configured origins list
+    if (allowedOrigins.length === 0 || allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    callback(null, true); // In production behind Railway, allow all for webhook access
+  },
   credentials: true,
 }));
 app.use(morgan('dev'));
@@ -65,7 +90,6 @@ const mapStatus = (webhookStatus: string): CallStatus => {
 const verifyWebhookSignature = async (signature: string, body: string): Promise<boolean> => {
   const webhookSecret = process.env.WEBHOOK_SECRET;
   if (!webhookSecret) {
-    console.warn('Webhook secret not configured');
     return true;
   }
 
@@ -79,11 +103,11 @@ const verifyWebhookSignature = async (signature: string, body: string): Promise<
 };
 
 // Health check endpoint
-app.get('/health', (req: Request, res: Response) => {
+app.get('/health', (_req: Request, res: Response) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// API Endpoints for frontend
+// API Endpoints
 
 // Get transcript by lead ID
 app.get('/api/transcript/:leadId', async (req: Request, res: Response) => {
@@ -187,7 +211,7 @@ app.post('/api/transcript/:leadId', async (req: Request, res: Response) => {
   }
 });
 
-// Webhook endpoint
+// Webhook endpoint - ElevenLabs sends post-call data here
 app.post('/api/webhook', async (req: Request, res: Response) => {
   try {
     const signature = req.headers['x-webhook-signature'] as string;
@@ -245,8 +269,21 @@ app.post('/api/webhook', async (req: Request, res: Response) => {
   }
 });
 
+// Serve frontend static files (built React app)
+const publicPath = path.join(__dirname, '..', 'public');
+app.use(express.static(publicPath));
+
+// SPA fallback - serve index.html for any non-API route
+app.get('*', (req: Request, res: Response) => {
+  // Don't serve index.html for API routes that weren't matched
+  if (req.path.startsWith('/api/')) {
+    return res.status(404).json({ error: 'Not found' });
+  }
+  res.sendFile(path.join(publicPath, 'index.html'));
+});
+
 // Error handling middleware
-app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
+app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   console.error('Error:', err);
   res.status(500).json({
     error: 'Internal server error',
@@ -254,14 +291,9 @@ app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
   });
 });
 
-// 404 handler
-app.use((req: Request, res: Response) => {
-  res.status(404).json({ error: 'Not found' });
-});
-
 // Start server
 app.listen(PORT, () => {
-  console.log(`Backend server running on port ${PORT}`);
+  console.log(`Server running on port ${PORT}`);
 });
 
 // Graceful shutdown

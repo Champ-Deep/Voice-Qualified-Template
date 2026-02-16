@@ -1,10 +1,9 @@
 version: '3.8'
 
 services:
-  # Redis service (same as production)
   redis:
     image: redis:7-alpine
-    container_name: eleven-labs-redis-dev
+    container_name: champqualifier-redis-dev
     ports:
       - "6379:6379"
     volumes:
@@ -16,14 +15,13 @@ services:
       timeout: 3s
       retries: 3
     networks:
-      - eleven-labs-network-dev
+      - champqualifier-network-dev
 
-  # Backend service with hot reload
   backend:
     build:
-      context: ./backend
-      dockerfile: ../Dockerfile.backend
-    container_name: eleven-labs-backend-dev
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: champqualifier-backend-dev
     ports:
       - "3001:3001"
     environment:
@@ -38,24 +36,22 @@ services:
       redis:
         condition: service_healthy
     networks:
-      - eleven-labs-network-dev
+      - champqualifier-network-dev
     restart: unless-stopped
 
-  # Frontend service with hot reload
   frontend:
     build:
       context: .
-      dockerfile: Dockerfile.frontend.dev
-    container_name: eleven-labs-frontend-dev
+      dockerfile: Dockerfile.frontend
+      args:
+        VITE_VOICE_API_URL: ${VITE_VOICE_API_URL:-https://api.elevenlabs.io/v1}
+        VITE_VOICE_API_KEY: ${VITE_VOICE_API_KEY}
+        VITE_AGENT_ID: ${VITE_AGENT_ID}
+        VITE_PHONE_NUMBER_ID: ${VITE_PHONE_NUMBER_ID}
+        VITE_BACKEND_URL: http://localhost:3001
+    container_name: champqualifier-frontend-dev
     ports:
       - "3000:3000"
-    environment:
-      - VITE_ELEVEN_LABS_API_URL=https://api.elevenlabs.io/v1
-      - VITE_ELEVEN_LABS_API_KEY=${VITE_ELEVEN_LABS_API_KEY}
-      - VITE_AGENT_ID=agent_3501kf4e3ak0eqkrxg1rttttk881
-      - VITE_PHONE_NUMBER_ID=phnum_4901kg4yjvgpetqbeknvhgm1stk4
-      - VITE_REDIS_URL=redis://redis:6379
-      - VITE_WEBHOOK_URL=http://localhost:3001/api/webhook
     volumes:
       - ./src:/app/src
       - ./public:/app/public
@@ -63,11 +59,11 @@ services:
     depends_on:
       - backend
     networks:
-      - eleven-labs-network-dev
+      - champqualifier-network-dev
     restart: unless-stopped
 
 networks:
-  eleven-labs-network-dev:
+  champqualifier-network-dev:
     driver: bridge
 
 volumes:

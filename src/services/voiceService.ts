@@ -2,8 +2,8 @@ import { VoiceAPIRequest, TranscriptData, LeadFormData } from '../types';
 
 const API_URL = import.meta.env.VITE_VOICE_API_URL || 'https://api.elevenlabs.io/v1';
 const API_KEY = import.meta.env.VITE_VOICE_API_KEY || '';
-const AGENT_ID = import.meta.env.VITE_AGENT_ID || 'agent_3501kf4e3ak0eqkrxg1rttttk881';
-const PHONE_NUMBER_ID = import.meta.env.VITE_PHONE_NUMBER_ID || 'phnum_4901kg4yjvgpetqbeknvhgm1stk4';
+const AGENT_ID = import.meta.env.VITE_AGENT_ID || '';
+const PHONE_NUMBER_ID = import.meta.env.VITE_PHONE_NUMBER_ID || '';
 
 class VoiceService {
   private headers: HeadersInit;
