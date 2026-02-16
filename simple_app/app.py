@@ -17,7 +17,7 @@ CORS(app)
 
 # Configuration
 DATABASE = 'leads.db'
-ELEVENLABS_API_KEY = '67cc697e61daf8be54313f64690b5f4975757e265fdd50ca0b10ec0e8e21d62b'
+ELEVENLABS_API_KEY = os.environ.get('ELEVENLABS_API_KEY', '67cc697e61daf8be54313f64690b5f4975757e265fdd50ca0b10ec0e8e21d62b')
 
 def init_db():
     """Initialize SQLite database"""
