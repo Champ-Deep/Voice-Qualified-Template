@@ -3,9 +3,14 @@ docker-compose.yml
 backend/
 frontend/
 database/
+.git
+.gitignore
+*.md
 Makefile
 test_system.py
 simple_test.py
 verify_system.py
 .env
-.git/
+__pycache__
+*.pyc
+*.pyo

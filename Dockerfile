@@ -12,6 +12,9 @@ COPY simple_app/app.py .
 # Create data directory for SQLite
 RUN mkdir -p /app/data
 
-EXPOSE 5000
+# Railway will set this
+ENV PORT=5000
+
+EXPOSE $PORT
 
 CMD ["python", "app.py"]

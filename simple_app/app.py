@@ -284,8 +284,9 @@ def health():
 
 if __name__ == '__main__':
     init_db()
+    port = int(os.environ.get('PORT', 5000))
     print("🚀 Starting Lead Management System...")
     print("📊 Database: SQLite (leads.db)")
-    print("🌐 Frontend: http://localhost:5000")
-    print("📡 API: http://localhost:5000/api")
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    print(f"🌐 Frontend: http://0.0.0.0:{port}")
+    print(f"📡 API: http://0.0.0.0:{port}/api")
+    app.run(host='0.0.0.0', port=port, debug=False)
