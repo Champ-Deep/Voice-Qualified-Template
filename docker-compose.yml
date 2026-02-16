@@ -1,0 +1,78 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: lead_management_db
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-leads_db}
+      POSTGRES_USER: ${POSTGRES_USER:-leads_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-leads_password}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - lead_management_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-leads_user} -d ${POSTGRES_DB:-leads_db}"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Python Backend API
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: lead_management_backend
+    environment:
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=${POSTGRES_DB:-leads_db}
+      - POSTGRES_USER=${POSTGRES_USER:-leads_user}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-leads_password}
+      - ELEVENLABS_API_KEY=${ELEVENLABS_API_KEY}
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - lead_management_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+
+  # React Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: lead_management_frontend
+    environment:
+      - REACT_APP_API_URL=http://localhost:8000
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - backend
+    networks:
+      - lead_management_network
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  lead_management_network:
+    driver: bridge

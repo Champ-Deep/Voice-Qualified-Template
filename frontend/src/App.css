@@ -1,0 +1,14 @@
+/* Additional component-specific styles */
+.App {
+  text-align: center;
+}
+
+h1 {
+  color: #333;
+  margin-bottom: 1.5rem;
+}
+
+h2 {
+  color: #007bff;
+  margin-bottom: 1rem;
+}
