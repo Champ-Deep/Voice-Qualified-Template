@@ -1,0 +1,9 @@
+docker-compose.yml
+backend/
+frontend/
+database/
+Makefile
+test_system.py
+simple_test.py
+verify_system.py
+.env
