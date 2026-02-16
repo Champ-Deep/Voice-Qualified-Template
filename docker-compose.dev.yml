@@ -1,0 +1,75 @@
+version: '3.8'
+
+services:
+  # Redis service (same as production)
+  redis:
+    image: redis:7-alpine
+    container_name: eleven-labs-redis-dev
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data_dev:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    networks:
+      - eleven-labs-network-dev
+
+  # Backend service with hot reload
+  backend:
+    build:
+      context: ./backend
+      dockerfile: ../Dockerfile.backend
+    container_name: eleven-labs-backend-dev
+    ports:
+      - "3001:3001"
+    environment:
+      - PORT=3001
+      - REDIS_URL=redis://redis:6379
+      - FRONTEND_URL=http://localhost:3000
+      - NODE_ENV=development
+    volumes:
+      - ./backend/src:/app/src
+    command: npm run dev
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - eleven-labs-network-dev
+    restart: unless-stopped
+
+  # Frontend service with hot reload
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend.dev
+    container_name: eleven-labs-frontend-dev
+    ports:
+      - "3000:3000"
+    environment:
+      - VITE_ELEVEN_LABS_API_URL=https://api.elevenlabs.io/v1
+      - VITE_ELEVEN_LABS_API_KEY=${VITE_ELEVEN_LABS_API_KEY}
+      - VITE_AGENT_ID=agent_3501kf4e3ak0eqkrxg1rttttk881
+      - VITE_PHONE_NUMBER_ID=phnum_4901kg4yjvgpetqbeknvhgm1stk4
+      - VITE_REDIS_URL=redis://redis:6379
+      - VITE_WEBHOOK_URL=http://localhost:3001/api/webhook
+    volumes:
+      - ./src:/app/src
+      - ./public:/app/public
+    command: npm run dev
+    depends_on:
+      - backend
+    networks:
+      - eleven-labs-network-dev
+    restart: unless-stopped
+
+networks:
+  eleven-labs-network-dev:
+    driver: bridge
+
+volumes:
+  redis_data_dev:
+    driver: local

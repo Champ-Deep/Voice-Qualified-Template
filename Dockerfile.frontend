@@ -1,0 +1,47 @@
+# Frontend Dockerfile
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+
+# Install dependencies
+RUN npm ci
+
+# Copy source code
+COPY . .
+
+# Build arguments for environment variables
+ARG VITE_VOICE_API_URL
+ARG VITE_VOICE_API_KEY
+ARG VITE_AGENT_ID
+ARG VITE_PHONE_NUMBER_ID
+ARG VITE_REDIS_URL
+ARG VITE_WEBHOOK_URL
+ARG VITE_BACKEND_URL
+
+# Set environment variables for build
+ENV VITE_VOICE_API_URL=$VITE_VOICE_API_URL
+ENV VITE_VOICE_API_KEY=$VITE_VOICE_API_KEY
+ENV VITE_AGENT_ID=$VITE_AGENT_ID
+ENV VITE_PHONE_NUMBER_ID=$VITE_PHONE_NUMBER_ID
+ENV VITE_REDIS_URL=$VITE_REDIS_URL
+ENV VITE_WEBHOOK_URL=$VITE_WEBHOOK_URL
+ENV VITE_BACKEND_URL=$VITE_BACKEND_URL
+
+# Build the application
+RUN npm run build
+
+# Production stage
+FROM nginx:alpine
+
+# Copy built files
+COPY --from=builder /app/dist /usr/share/nginx/html
+
+# Copy nginx configuration
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+
+EXPOSE 80
+
+CMD ["nginx", "-g", "daemon off;"]
