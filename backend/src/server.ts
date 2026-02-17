@@ -108,6 +108,24 @@ app.get('/health', (_req: Request, res: Response) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// Debug endpoint - shows file system state (remove after debugging)
+app.get('/api/debug', (_req: Request, res: Response) => {
+  const debugPublicPath = path.join(__dirname, '..', 'public');
+  const debugInfo = {
+    __dirname,
+    publicPath: debugPublicPath,
+    indexExists: fs.existsSync(path.join(debugPublicPath, 'index.html')),
+    publicDirExists: fs.existsSync(debugPublicPath),
+    publicContents: fs.existsSync(debugPublicPath) ? fs.readdirSync(debugPublicPath) : 'DIR NOT FOUND',
+    cwd: process.cwd(),
+    appContents: fs.existsSync('/app') ? fs.readdirSync('/app') : 'NOT FOUND',
+    appDistContents: fs.existsSync('/app/dist') ? fs.readdirSync('/app/dist') : 'NOT FOUND',
+    appPublicContents: fs.existsSync('/app/public') ? fs.readdirSync('/app/public') : 'NOT FOUND',
+    env: { PORT: process.env.PORT, NODE_ENV: process.env.NODE_ENV },
+  };
+  res.json(debugInfo);
+});
+
 // API Endpoints
 
 // Get transcript by lead ID
