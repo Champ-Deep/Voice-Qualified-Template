@@ -57,12 +57,11 @@ COPY --from=backend-builder /app/backend/dist ./dist
 # Copy built frontend into /app/public (backend serves this as static)
 COPY --from=frontend-builder /app/frontend/dist ./public
 
-# Single port for everything
-ENV PORT=3001
+# Railway injects PORT at runtime; default to 3001 for local Docker
 EXPOSE 3001
 
-# Health check — backend /health endpoint
+# Health check uses $PORT so it works on any platform
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD wget -qO- http://localhost:3001/health || exit 1
+  CMD wget -qO- http://localhost:${PORT:-3001}/health || exit 1
 
 CMD ["node", "dist/server.js"]

@@ -4,6 +4,7 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
 import Redis from 'ioredis';
+import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -271,6 +272,14 @@ app.post('/api/webhook', async (req: Request, res: Response) => {
 
 // Serve frontend static files (built React app)
 const publicPath = path.join(__dirname, '..', 'public');
+const indexPath = path.join(publicPath, 'index.html');
+
+console.log('Static file paths:', { publicPath, indexPath, __dirname });
+if (!fs.existsSync(indexPath)) {
+  console.error(`WARNING: index.html not found at ${indexPath}`);
+  console.error('Directory listing of publicPath:', fs.existsSync(publicPath) ? fs.readdirSync(publicPath) : 'DIR NOT FOUND');
+}
+
 app.use(express.static(publicPath));
 
 // SPA fallback - serve index.html for any non-API route
@@ -279,7 +288,12 @@ app.get('*', (req: Request, res: Response) => {
   if (req.path.startsWith('/api/')) {
     return res.status(404).json({ error: 'Not found' });
   }
-  res.sendFile(path.join(publicPath, 'index.html'));
+  res.sendFile(indexPath, (err) => {
+    if (err) {
+      console.error('Error serving index.html:', err);
+      res.status(500).json({ error: 'Frontend not available' });
+    }
+  });
 });
 
 // Error handling middleware
