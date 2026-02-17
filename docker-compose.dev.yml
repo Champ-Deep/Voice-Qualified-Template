@@ -17,47 +17,25 @@ services:
     networks:
       - champqualifier-network-dev
 
-  backend:
+  app:
     build:
       context: .
-      dockerfile: Dockerfile.backend
-    container_name: champqualifier-backend-dev
-    ports:
-      - "3001:3001"
-    environment:
-      - PORT=3001
-      - REDIS_URL=redis://redis:6379
-      - FRONTEND_URL=http://localhost:3000
-      - NODE_ENV=development
-    volumes:
-      - ./backend/src:/app/src
-    command: npm run dev
-    depends_on:
-      redis:
-        condition: service_healthy
-    networks:
-      - champqualifier-network-dev
-    restart: unless-stopped
-
-  frontend:
-    build:
-      context: .
-      dockerfile: Dockerfile.frontend
+      dockerfile: Dockerfile
       args:
         VITE_VOICE_API_URL: ${VITE_VOICE_API_URL:-https://api.elevenlabs.io/v1}
         VITE_VOICE_API_KEY: ${VITE_VOICE_API_KEY}
         VITE_AGENT_ID: ${VITE_AGENT_ID}
         VITE_PHONE_NUMBER_ID: ${VITE_PHONE_NUMBER_ID}
-        VITE_BACKEND_URL: http://localhost:3001
-    container_name: champqualifier-frontend-dev
+    container_name: champqualifier-app-dev
     ports:
-      - "3000:3000"
-    volumes:
-      - ./src:/app/src
-      - ./public:/app/public
-    command: npm run dev
+      - "3001:3001"
+    environment:
+      - PORT=3001
+      - REDIS_URL=redis://redis:6379
+      - NODE_ENV=development
     depends_on:
-      - backend
+      redis:
+        condition: service_healthy
     networks:
       - champqualifier-network-dev
     restart: unless-stopped

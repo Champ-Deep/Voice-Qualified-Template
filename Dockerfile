@@ -1,69 +1,68 @@
-# Stage 1: Build the frontend
+# ============================================
+# Single container: Frontend + Backend combined
+# ============================================
+
+# Stage 1: Build the frontend (React + Vite)
 FROM node:20-alpine AS frontend-builder
 
 WORKDIR /app/frontend
 
-# Copy frontend package files
 COPY package.json package-lock.json ./
-
-# Install frontend dependencies
 RUN npm ci
 
-# Copy frontend source
 COPY index.html tsconfig.json tsconfig.node.json vite.config.ts postcss.config.js tailwind.config.js ./
 COPY src/ ./src/
 COPY public/ ./public/
 
-# Build args for Vite (baked in at build time)
+# Vite env vars are baked in at build time
 ARG VITE_VOICE_API_URL=https://api.elevenlabs.io/v1
 ARG VITE_VOICE_API_KEY
 ARG VITE_AGENT_ID
 ARG VITE_PHONE_NUMBER_ID
 
-# Frontend talks to same origin (backend serves it), so VITE_BACKEND_URL is empty
 ENV VITE_VOICE_API_URL=$VITE_VOICE_API_URL
 ENV VITE_VOICE_API_KEY=$VITE_VOICE_API_KEY
 ENV VITE_AGENT_ID=$VITE_AGENT_ID
 ENV VITE_PHONE_NUMBER_ID=$VITE_PHONE_NUMBER_ID
+# Frontend talks to same origin — backend serves everything
 ENV VITE_BACKEND_URL=
 
-# Build frontend
 RUN npm run build
 
-# Stage 2: Build the backend
+# Stage 2: Build the backend (Express + TypeScript)
 FROM node:20-alpine AS backend-builder
 
 WORKDIR /app/backend
 
-# Copy backend package files
 COPY backend/package.json backend/package-lock.json ./
-
-# Install backend dependencies
 RUN npm ci
 
-# Copy backend source
 COPY backend/src/ ./src/
 COPY backend/tsconfig.json ./
 
-# Build backend
 RUN npm run build
 
-# Stage 3: Production image
+# Stage 3: Production image — single container serving both
 FROM node:20-alpine
 
 WORKDIR /app
 
-# Copy backend package files and install production deps only
+# Install production backend deps only
 COPY backend/package.json backend/package-lock.json ./
-RUN npm ci --only=production
+RUN npm ci --only=production && npm cache clean --force
 
-# Copy built backend
+# Copy compiled backend
 COPY --from=backend-builder /app/backend/dist ./dist
 
-# Copy built frontend static files
+# Copy built frontend into /app/public (backend serves this as static)
 COPY --from=frontend-builder /app/frontend/dist ./public
 
-# Railway provides PORT via env var
-EXPOSE ${PORT:-3001}
+# Single port for everything
+ENV PORT=3001
+EXPOSE 3001
+
+# Health check — backend /health endpoint
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD wget -qO- http://localhost:3001/health || exit 1
 
 CMD ["node", "dist/server.js"]

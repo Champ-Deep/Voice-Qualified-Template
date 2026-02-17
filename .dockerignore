@@ -17,6 +17,4 @@ coverage
 .DS_Store
 api
 docker-compose*.yml
-Dockerfile.frontend
-Dockerfile.backend
 vercel.json
