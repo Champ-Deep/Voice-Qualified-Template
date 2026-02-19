@@ -4,7 +4,6 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
 import Redis from 'ioredis';
-import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -15,6 +14,7 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+const REDIS_TTL_SECONDS = 86400; // 24 hours
 
 // Redis connection - uses REDIS_URL env var (Railway provides this when you add a Redis plugin)
 const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379', {
@@ -108,24 +108,6 @@ app.get('/health', (_req: Request, res: Response) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// Debug endpoint - shows file system state (remove after debugging)
-app.get('/api/debug', (_req: Request, res: Response) => {
-  const debugPublicPath = path.join(__dirname, '..', 'public');
-  const debugInfo = {
-    __dirname,
-    publicPath: debugPublicPath,
-    indexExists: fs.existsSync(path.join(debugPublicPath, 'index.html')),
-    publicDirExists: fs.existsSync(debugPublicPath),
-    publicContents: fs.existsSync(debugPublicPath) ? fs.readdirSync(debugPublicPath) : 'DIR NOT FOUND',
-    cwd: process.cwd(),
-    appContents: fs.existsSync('/app') ? fs.readdirSync('/app') : 'NOT FOUND',
-    appDistContents: fs.existsSync('/app/dist') ? fs.readdirSync('/app/dist') : 'NOT FOUND',
-    appPublicContents: fs.existsSync('/app/public') ? fs.readdirSync('/app/public') : 'NOT FOUND',
-    env: { PORT: process.env.PORT, NODE_ENV: process.env.NODE_ENV },
-  };
-  res.json(debugInfo);
-});
-
 // API Endpoints
 
 // Get transcript by lead ID
@@ -166,7 +148,7 @@ app.get('/api/status/:leadId', async (req: Request, res: Response) => {
 app.post('/api/lead', async (req: Request, res: Response) => {
   try {
     const { leadId, data } = req.body;
-    await redis.setex(`lead:${leadId}`, 86400, JSON.stringify(data));
+    await redis.setex(`lead:${leadId}`, REDIS_TTL_SECONDS, JSON.stringify(data));
     res.json({ success: true });
   } catch (error) {
     console.error('Error saving lead:', error);
@@ -192,7 +174,7 @@ app.post('/api/conversation/:leadId', async (req: Request, res: Response) => {
   try {
     const { leadId } = req.params;
     const { conversationId } = req.body;
-    await redis.setex(`conv:${leadId}`, 86400, conversationId);
+    await redis.setex(`conv:${leadId}`, REDIS_TTL_SECONDS, conversationId);
     res.json({ success: true });
   } catch (error) {
     console.error('Error saving conversation ID:', error);
@@ -222,11 +204,104 @@ app.post('/api/transcript/:leadId', async (req: Request, res: Response) => {
   try {
     const { leadId } = req.params;
     const transcript = req.body;
-    await redis.setex(`transcript:${leadId}`, 86400, JSON.stringify(transcript));
+    await redis.setex(`transcript:${leadId}`, REDIS_TTL_SECONDS, JSON.stringify(transcript));
     res.json({ success: true });
   } catch (error) {
     console.error('Error saving transcript:', error);
     res.status(500).json({ error: 'Failed to save transcript' });
+  }
+});
+
+// Initiate outbound call via ElevenLabs — keeps API key server-side
+app.post('/api/calls/initiate', async (req: Request, res: Response) => {
+  const elevenlabsApiKey = process.env.ELEVENLABS_API_KEY;
+  const agentId = process.env.AGENT_ID;
+  const phoneNumberId = process.env.PHONE_NUMBER_ID;
+
+  if (!elevenlabsApiKey || !agentId || !phoneNumberId) {
+    return res.status(500).json({ error: 'ElevenLabs credentials not configured on server' });
+  }
+
+  try {
+    const body = req.body as Record<string, any>;
+
+    // Support two calling conventions:
+    // 1. Frontend shape:  { leadId, formData: { username, companyName, companyEmail, phoneNumber } }
+    // 2. ChampIQ shape:   { call_id, phone_number, script, call_type, metadata: { prospect_id, ... } }
+    let toNumber: string;
+    let leadId: string;
+    let leadName: string;
+    let company: string;
+    let email: string;
+    let script: string | undefined;
+
+    if (body.formData) {
+      // Frontend convention
+      const fd = body.formData as { username: string; companyName: string; companyEmail: string; phoneNumber: string };
+      leadId = body.leadId as string;
+      toNumber = fd.phoneNumber;
+      leadName = fd.username;
+      company = fd.companyName;
+      email = fd.companyEmail;
+    } else {
+      // ChampIQ convention
+      leadId = (body.metadata?.prospect_id as string) || (body.call_id as string);
+      toNumber = body.phone_number as string;
+      leadName = (body.metadata?.lead_name as string) || '';
+      company = (body.metadata?.company as string) || '';
+      email = (body.metadata?.email as string) || '';
+      script = body.script as string | undefined;
+    }
+
+    if (!toNumber) {
+      return res.status(400).json({ error: 'phone_number / formData.phoneNumber is required' });
+    }
+
+    const dynamicVariables: Record<string, string> = {
+      lead_name: leadName,
+      leadId: leadId,
+      company: company,
+      email: email,
+    };
+    if (script) dynamicVariables.script = script;
+
+    const payload = {
+      agent_id: agentId,
+      agent_phone_number_id: phoneNumberId,
+      to_number: toNumber,
+      conversation_initiation_client_data: {
+        type: 'conversation_initiation_client_data',
+        dynamic_variables: dynamicVariables,
+      },
+    };
+
+    const upstream = await fetch('https://api.elevenlabs.io/v1/convai/twilio/outbound-call', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'xi-api-key': elevenlabsApiKey,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const data = await upstream.json() as Record<string, unknown>;
+
+    if (!upstream.ok) {
+      console.error('ElevenLabs API error:', data);
+      return res.status(upstream.status).json({ error: (data.message as string) || 'ElevenLabs API error' });
+    }
+
+    // Store the conversation ID keyed by leadId for later status polling
+    if (data.conversation_id && leadId) {
+      await redis.setex(`conv:${leadId}`, REDIS_TTL_SECONDS, data.conversation_id as string);
+      await redis.hset(`lead:status:${leadId}`, 'status', 'initiated', 'updatedAt', new Date().toISOString());
+    }
+
+    console.log(`Call initiated for lead ${leadId}, conversation: ${data.conversation_id}`);
+    res.json({ ...data, call_id: data.conversation_id, status: 'initiated' });
+  } catch (error) {
+    console.error('Error initiating call:', error);
+    res.status(500).json({ error: 'Failed to initiate call' });
   }
 });
 
@@ -261,7 +336,7 @@ app.post('/api/webhook', async (req: Request, res: Response) => {
       })),
     };
 
-    await redis.setex(`transcript:${lead_id}`, 86400, JSON.stringify(transcriptData));
+    await redis.setex(`transcript:${lead_id}`, REDIS_TTL_SECONDS, JSON.stringify(transcriptData));
 
     // Update call status
     const callStatus = mapStatus(status);
@@ -291,12 +366,6 @@ app.post('/api/webhook', async (req: Request, res: Response) => {
 // Serve frontend static files (built React app)
 const publicPath = path.join(__dirname, '..', 'public');
 const indexPath = path.join(publicPath, 'index.html');
-
-console.log('Static file paths:', { publicPath, indexPath, __dirname });
-if (!fs.existsSync(indexPath)) {
-  console.error(`WARNING: index.html not found at ${indexPath}`);
-  console.error('Directory listing of publicPath:', fs.existsSync(publicPath) ? fs.readdirSync(publicPath) : 'DIR NOT FOUND');
-}
 
 app.use(express.static(publicPath));
 

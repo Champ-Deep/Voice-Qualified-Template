@@ -14,14 +14,12 @@ COPY index.html tsconfig.json tsconfig.node.json vite.config.ts postcss.config.j
 COPY src/ ./src/
 COPY public/ ./public/
 
-# Vite env vars are baked in at build time
+# Vite env vars are baked in at build time (no secrets — API key stays server-side)
 ARG VITE_VOICE_API_URL=https://api.elevenlabs.io/v1
-ARG VITE_VOICE_API_KEY
 ARG VITE_AGENT_ID
 ARG VITE_PHONE_NUMBER_ID
 
 ENV VITE_VOICE_API_URL=$VITE_VOICE_API_URL
-ENV VITE_VOICE_API_KEY=$VITE_VOICE_API_KEY
 ENV VITE_AGENT_ID=$VITE_AGENT_ID
 ENV VITE_PHONE_NUMBER_ID=$VITE_PHONE_NUMBER_ID
 # Frontend talks to same origin — backend serves everything

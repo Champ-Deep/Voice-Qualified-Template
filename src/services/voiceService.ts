@@ -1,46 +1,23 @@
-import { VoiceAPIRequest, TranscriptData, LeadFormData } from '../types';
+import { TranscriptData, LeadFormData } from '../types';
 
-const API_URL = import.meta.env.VITE_VOICE_API_URL || 'https://api.elevenlabs.io/v1';
-const API_KEY = import.meta.env.VITE_VOICE_API_KEY || '';
-const AGENT_ID = import.meta.env.VITE_AGENT_ID || '';
-const PHONE_NUMBER_ID = import.meta.env.VITE_PHONE_NUMBER_ID || '';
+// Call initiation goes through our own backend so the ElevenLabs API key
+// never leaves the server. Only non-secret vars are read from VITE_ env.
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || '';
+const ELEVENLABS_API_URL = import.meta.env.VITE_VOICE_API_URL || 'https://api.elevenlabs.io/v1';
 
 class VoiceService {
-  private headers: HeadersInit;
-
-  constructor() {
-    this.headers = {
-      'Content-Type': 'application/json',
-      'xi-api-key': API_KEY,
-    };
-  }
-
+  // Initiate call via backend proxy — API key stays server-side
   async initiateCall(formData: LeadFormData, leadId: string): Promise<any> {
-    const request: VoiceAPIRequest = {
-      agent_id: AGENT_ID,
-      agent_phone_number_id: PHONE_NUMBER_ID,
-      to_number: formData.phoneNumber,
-      conversation_initiation_client_data: {
-        type: 'conversation_initiation_client_data',
-        dynamic_variables: {
-          lead_name: formData.username,
-          leadId: leadId,
-          company: formData.companyName,
-          email: formData.companyEmail,
-        },
-      },
-    };
-
     try {
-      const response = await fetch(`${API_URL}/convai/twilio/outbound-call`, {
+      const response = await fetch(`${BACKEND_URL}/api/calls/initiate`, {
         method: 'POST',
-        headers: this.headers,
-        body: JSON.stringify(request),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ leadId, formData }),
       });
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.message || `API call failed: ${response.statusText}`);
+        throw new Error(errorData.error || `Call initiation failed: ${response.statusText}`);
       }
 
       return await response.json();
@@ -52,15 +29,10 @@ class VoiceService {
 
   async getCallStatus(conversationId: string): Promise<any> {
     try {
-      const response = await fetch(`${API_URL}/convai/conversations/${conversationId}`, {
-        method: 'GET',
-        headers: this.headers,
-      });
-
+      const response = await fetch(`${BACKEND_URL}/api/conversation-status/${conversationId}`);
       if (!response.ok) {
         throw new Error(`Failed to get call status: ${response.statusText}`);
       }
-
       return await response.json();
     } catch (error) {
       console.error('Error getting call status:', error);
@@ -70,24 +42,17 @@ class VoiceService {
 
   async getTranscript(conversationId: string): Promise<TranscriptData | null> {
     try {
-      const response = await fetch(`${API_URL}/convai/conversations/${conversationId}`, {
-        method: 'GET',
-        headers: this.headers,
-      });
-
+      const response = await fetch(`${ELEVENLABS_API_URL}/convai/conversations/${conversationId}`);
       if (!response.ok) {
-        if (response.status === 404) {
-          return null;
-        }
+        if (response.status === 404) return null;
         throw new Error(`Failed to get transcript: ${response.statusText}`);
       }
 
       const data = await response.json();
 
-      // Transform the response to match our TranscriptData interface
       if (data.transcript && data.transcript.length > 0) {
         return {
-          leadId: '', // Will be set by the caller
+          leadId: '',
           conversationId: data.conversation_id,
           status: data.status || 'completed',
           messages: data.transcript.map((msg: any) => ({
@@ -101,22 +66,6 @@ class VoiceService {
       return null;
     } catch (error) {
       console.error('Error getting transcript:', error);
-      throw error;
-    }
-  }
-
-  async cancelCall(callId: string): Promise<void> {
-    try {
-      const response = await fetch(`${API_URL}/conversational-ai/calls/${callId}`, {
-        method: 'DELETE',
-        headers: this.headers,
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to cancel call: ${response.statusText}`);
-      }
-    } catch (error) {
-      console.error('Error canceling call:', error);
       throw error;
     }
   }
