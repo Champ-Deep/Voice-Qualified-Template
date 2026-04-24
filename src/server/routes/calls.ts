@@ -14,6 +14,9 @@ const InitiateSchema = z.object({
   provider: z.string().optional(),
   agent_id: z.string().optional(),
   dynamic_vars: z.record(z.string()).optional(),
+  // Per-call credential overrides from ChampIQ Canvas credential store
+  elevenlabs_api_key: z.string().optional(),
+  elevenlabs_phone_number_id: z.string().optional(),
   // ChampIQ Canvas shape support
   phone_number: z.string().optional(),
   call_id: z.string().optional(),
@@ -55,6 +58,8 @@ export function callsRouter(orchestrator: CallOrchestrator): Router {
         provider: body.provider,
         agentId: body.agent_id,
         dynamicVars: body.dynamic_vars,
+        elevenlabsApiKey: body.elevenlabs_api_key,
+        elevenlabsPhoneNumberId: body.elevenlabs_phone_number_id,
       });
 
       res.status(201).json(result);

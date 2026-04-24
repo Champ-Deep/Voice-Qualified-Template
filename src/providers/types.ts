@@ -15,6 +15,10 @@ export interface CallParams {
   prevSummary?: string;
   prevOutcome?: string;
   prevCallDate?: string;
+  // Per-call credential overrides (from ChampIQ Canvas credential store)
+  elevenlabsApiKey?: string;
+  elevenlabsAgentId?: string;
+  elevenlabsPhoneNumberId?: string;
 }
 
 export interface ProviderCallResult {

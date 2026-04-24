@@ -16,8 +16,11 @@ export interface InitiateCallOptions {
   flowId?: string;
   canvasNodeId?: string;
   provider?: string;
-  agentId?: string;       // override configured agent
+  agentId?: string;
   dynamicVars?: Record<string, string>;
+  // Per-call credential overrides forwarded from ChampIQ Canvas credential store
+  elevenlabsApiKey?: string;
+  elevenlabsPhoneNumberId?: string;
 }
 
 export interface InitiateCallResult {
@@ -69,14 +72,16 @@ export class CallOrchestrator {
       email: opts.email ?? '',
       script: opts.script,
       dynamicVars,
+      elevenlabsApiKey: opts.elevenlabsApiKey,
+      elevenlabsAgentId: opts.agentId,
+      elevenlabsPhoneNumberId: opts.elevenlabsPhoneNumberId,
     };
 
     // Initiate call with provider
     const result = await provider.initiateCall(params);
 
-    // Determine agentId
-    const agentId = opts.agentId
-      ?? (this.config.providers.elevenlabs?.agent_id ?? '');
+    // Resolve agentId for the CallNode record (per-call > config default)
+    const agentId = opts.agentId ?? (this.config.providers.elevenlabs?.agent_id ?? '');
 
     // Build initial CallNode
     const node: CallNode = {

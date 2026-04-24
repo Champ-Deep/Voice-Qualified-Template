@@ -11,6 +11,14 @@ export class ElevenLabsProvider implements IVoiceProvider {
   constructor(private cfg: ElevenLabsConfig) {}
 
   async initiateCall(params: CallParams): Promise<ProviderCallResult> {
+    const apiKey = params.elevenlabsApiKey ?? this.cfg.api_key;
+    const agentId = params.elevenlabsAgentId ?? this.cfg.agent_id;
+    const phoneNumberId = params.elevenlabsPhoneNumberId ?? this.cfg.phone_number_id;
+
+    if (!apiKey) throw new Error('ElevenLabs API key is required (set in ChampVoice credentials or ELEVENLABS_API_KEY)');
+    if (!agentId) throw new Error('ElevenLabs agent ID is required (set in ChampVoice credentials or ELEVENLABS_AGENT_ID)');
+    if (!phoneNumberId) throw new Error('ElevenLabs phone number ID is required (set in ChampVoice credentials or ELEVENLABS_PHONE_NUMBER_ID)');
+
     const dynamicVars: Record<string, string> = {
       lead_name: params.leadName,
       company: params.company,
@@ -23,8 +31,8 @@ export class ElevenLabsProvider implements IVoiceProvider {
     if (params.prevCallDate) dynamicVars['prev_call_date'] = params.prevCallDate;
 
     const body: ELOutboundCallRequest = {
-      agent_id: this.cfg.agent_id,
-      agent_phone_number_id: this.cfg.phone_number_id,
+      agent_id: agentId,
+      agent_phone_number_id: phoneNumberId,
       to_number: params.toNumber,
       conversation_initiation_client_data: {
         type: 'conversation_initiation_client_data',
@@ -36,7 +44,7 @@ export class ElevenLabsProvider implements IVoiceProvider {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'xi-api-key': this.cfg.api_key,
+        'xi-api-key': apiKey,
       },
       body: JSON.stringify(body),
     });
